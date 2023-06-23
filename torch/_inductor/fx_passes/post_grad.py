@@ -25,6 +25,7 @@ from ..pattern_matcher import (
     stable_topological_sort,
 )
 from ..virtualized import V
+from .group_fusion import group_fusion_passes
 
 
 log = logging.getLogger(__name__)
@@ -58,6 +59,8 @@ def post_grad_passes(gm: torch.fx.GraphModule, locality_reorder: bool):
 
         for patterns in pass_patterns:
             patterns.apply(gm.graph)
+
+        group_fusion_passes(gm.graph)
 
     stable_topological_sort(gm.graph)
     gm.recompile()

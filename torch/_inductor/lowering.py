@@ -1756,6 +1756,13 @@ make_fallback(aten.exponential.default, warn=False)
 make_fallback(aten.miopen_batch_norm, warn=False)
 
 
+# import fbgemm_gpu
+# make_fallback(torch.ops.fbgemm.gmm)
+
+if torch.version.hip is not None and torch.cuda.is_available():
+    # tl.reduce not available yet in ROCm's version of triton
+    make_fallback(aten.prod, warn=False)
+
 @register_lowering(aten.clone)
 def clone(x, *, memory_format=0):
     # TODO(jansel): memory format
