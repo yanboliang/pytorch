@@ -27,7 +27,7 @@ from torch._dynamo.test_case import run_tests, TestCase
 import torch._inductor
 from torch._dynamo.utils import counters
 
-class TestLinearFusion(TestCase):
+class TestGroupFusion(TestCase):
     def test_group_linear_fusion(self):
         class TestModule(torch.nn.Module):
             def __init__(self, z: int, has_bias: bool) -> None:
@@ -82,6 +82,7 @@ class TestLinearFusion(TestCase):
 
         Z = 16
         for has_bias in [True, False]:
+            counters.clear()
             module = TestModule(Z, has_bias).eval()
             input = [
                 torch.randn(4, Z),
