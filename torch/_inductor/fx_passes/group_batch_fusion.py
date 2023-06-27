@@ -68,29 +68,33 @@ def _get_independent_node_subsets(mm_node_list, dependency_matrix):
         mm_node_list = next_round_mm_node_list
 
 
-class GroupBatchFusion:
+class GroupBatchFusionBase:
     def match(self, node):
-        pass
+        raise NotImplementedError("match called on base")
 
     def fuse(self, graph, subset):
-        pass
+        raise NotImplementedError("fuse called on base")
 
 
-class GroupFusion(GroupBatchFusion):
+class GroupFusion(GroupBatchFusionBase):
     pass
 
 
-class BatchFusion(GroupBatchFusion):
+class BatchFusion(GroupBatchFusionBase):
     pass
 
 
 class GroupLinearFusion(GroupFusion):
     def match(self, node):
-        if CallFunctionVarArgs(aten.mm.default).match(node):
+        if (
+            CallFunctionVarArgs(aten.mm.default).match(node)
+            and len(node.args[0].meta["tensor_meta"].shape) == 2
+        ):
             group_key = ("group_linear",)
             self.fused_op = aten.mm.default
         elif (
             CallFunctionVarArgs(aten.addmm.default).match(node)
+            and len(node.args[1].meta["tensor_meta"].shape) == 2
             and node.kwargs.get("beta", 1.0) == 1.0
             and node.kwargs.get("alpha", 1.0) == 1.0
         ):
@@ -124,7 +128,8 @@ class GroupLinearFusion(GroupFusion):
 
         with graph.inserting_before(subset[0]):
             fused_mm = graph.call_function(
-                torch.ops.fbgemm.group_gemm, args=(group_inputs, group_weights, group_biases)
+                torch.ops.fbgemm.group_gemm,
+                args=(group_inputs, group_weights, group_biases),
             )
 
         for i, original_mm in enumerate(group_nodes):
@@ -142,18 +147,16 @@ def apply_group_batch_fusion(graph, fusion_rule):
 
     for node in graph.nodes:
         group_key = fusion_rule.match(node)
-
-        # doesn't match
-        if group_key is None:
-            continue
-
-        fusible_groups[group_key].append(node)
+        if group_key:
+            fusible_groups[group_key].append(node)
 
     for fusible_nodes in fusible_groups.values():
+        fusible_subset_list = []
         for subset in _get_independent_node_subsets(fusible_nodes, dependency_matrix):
-            if len(subset) <= 1:
-                continue
+            if len(subset) > 1:
+                fusible_subset_list.append(subset)
 
+        for subset in fusible_subset_list:
             fusion_rule.fuse(graph, subset)
 
             if isinstance(fusion_rule, GroupFusion):
