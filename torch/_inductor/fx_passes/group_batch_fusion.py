@@ -6,8 +6,6 @@ from torch._dynamo.utils import counters
 
 from ..pattern_matcher import CallFunctionVarArgs
 
-# import fbgemm_gpu  # Note: only after importing fbgemm_gpu, we can use `torch.ops.fbgemm.gmm`
-
 aten = torch.ops.aten
 
 
@@ -91,7 +89,6 @@ class GroupLinearFusion(GroupFusion):
             and len(node.args[0].meta["tensor_meta"].shape) == 2
         ):
             group_key = ("group_linear",)
-            self.fused_op = aten.mm.default
         elif (
             CallFunctionVarArgs(aten.addmm.default).match(node)
             and len(node.args[1].meta["tensor_meta"].shape) == 2
@@ -99,7 +96,6 @@ class GroupLinearFusion(GroupFusion):
             and node.kwargs.get("alpha", 1.0) == 1.0
         ):
             group_key = ("group_linear",)
-            self.fused_op = aten.addmm.default
         else:
             group_key = None
         return group_key
@@ -110,10 +106,10 @@ class GroupLinearFusion(GroupFusion):
         group_biases = []
         group_nodes = []
         for node in subset:
-            if self.fused_op is aten.addmm.default:
+            if CallFunctionVarArgs(aten.addmm.default).match(node):
                 bias, input, weight = node.args
             else:
-                assert self.fused_op is aten.mm.default
+                assert CallFunctionVarArgs(aten.mm.default).match(node)
                 input, weight = node.args
                 bias = None
             group_nodes.append(node)
@@ -123,8 +119,6 @@ class GroupLinearFusion(GroupFusion):
 
         if all(bias is None for bias in group_biases):
             group_biases = None
-        else:
-            group_biases = [0.0 if bias is None else bias for bias in group_biases]
 
         with graph.inserting_before(subset[0]):
             fused_mm = graph.call_function(
@@ -166,5 +160,10 @@ def apply_group_batch_fusion(graph, fusion_rule):
 
 
 def group_batch_fusion_passes(graph: torch.fx.Graph):
-    for fusion_rule in [GroupLinearFusion()]:
+    fusions = []
+
+    if is_fbcode():
+        fusions += [GroupLinearFusion()]
+
+    for fusion_rule in fusions:
         apply_group_batch_fusion(graph, fusion_rule)
