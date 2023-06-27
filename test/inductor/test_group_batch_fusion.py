@@ -1,7 +1,7 @@
 # Owner(s): ["module: inductor"]
 
 
-def gmm(*args, **kwargs):
+def group_gemm(*args, **kwargs):
     if len(args) == 2:
         inputs, weights = args
         biases = None
@@ -18,12 +18,12 @@ def gmm(*args, **kwargs):
     ]
 
 
-gmm.__module__ = "torch._ops.fbgemm"
+group_gemm.__module__ = "torch._ops.fbgemm"
 
 
 import torch
 
-torch.ops.fbgemm.gmm = gmm
+torch.ops.fbgemm.group_gemm = group_gemm
 
 import torch._inductor
 from torch._dynamo.test_case import run_tests, TestCase

@@ -124,7 +124,7 @@ class GroupLinearFusion(GroupFusion):
 
         with graph.inserting_before(subset[0]):
             fused_mm = graph.call_function(
-                torch.ops.fbgemm.gmm, args=(group_inputs, group_weights, group_biases)
+                torch.ops.fbgemm.group_gemm, args=(group_inputs, group_weights, group_biases)
             )
 
         for i, original_mm in enumerate(group_nodes):
