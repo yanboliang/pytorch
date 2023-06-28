@@ -1759,8 +1759,14 @@ if torch.version.hip is not None and torch.cuda.is_available():
     # tl.reduce not available yet in ROCm's version of triton
     make_fallback(aten.prod, warn=False)
 
-# import fbgemm_gpu
-# make_fallback(torch.ops.fbgemm.gmm)
+
+if config.is_fbcode():
+    try:
+        import fbgemm_gpu
+        make_fallback(torch.ops.fbgemm.group_gemm)
+    except Exception:
+        pass
+
 
 @register_lowering(aten.clone)
 def clone(x, *, memory_format=0):

@@ -5,6 +5,7 @@ import torch
 from torch._dynamo.utils import counters
 
 from ..pattern_matcher import CallFunctionVarArgs
+from .. import config
 
 aten = torch.ops.aten
 
@@ -144,26 +145,30 @@ def apply_group_batch_fusion(graph, fusion_rule):
         if group_key:
             fusible_groups[group_key].append(node)
 
+    fusible_subset_list = []
     for fusible_nodes in fusible_groups.values():
-        fusible_subset_list = []
         for subset in _get_independent_node_subsets(fusible_nodes, dependency_matrix):
             if len(subset) > 1:
                 fusible_subset_list.append(subset)
 
-        for subset in fusible_subset_list:
-            fusion_rule.fuse(graph, subset)
+    for subset in fusible_subset_list:
+        fusion_rule.fuse(graph, subset)
 
-            if isinstance(fusion_rule, GroupFusion):
-                counters["inductor"]["group_fusion"] += 1
-            else:
-                counters["inductor"]["batch_fusion"] += 1
+        if isinstance(fusion_rule, GroupFusion):
+            counters["inductor"]["group_fusion"] += 1
+        else:
+            counters["inductor"]["batch_fusion"] += 1
 
 
 def group_batch_fusion_passes(graph: torch.fx.Graph):
     fusions = []
 
-    if is_fbcode():
-        fusions += [GroupLinearFusion()]
+    if config.is_fbcode():
+        try:
+            import fbgemm_gpu
+            fusions += [GroupLinearFusion()]
+        except Exception:
+            pass
 
     for fusion_rule in fusions:
         apply_group_batch_fusion(graph, fusion_rule)

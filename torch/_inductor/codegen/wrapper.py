@@ -328,6 +328,11 @@ class WrapperCodeGen(CodeGen):
                 from {codecache.__name__} import AsyncCompile
                 from torch._inductor.select_algorithm import extern_kernels
 
+                try:
+                    import fbgemm_gpu
+                except Exception:
+                    pass
+
                 aten = torch.ops.aten
                 assert_size_stride = torch._C._dynamo.guards.assert_size_stride
                 async_compile = AsyncCompile()
