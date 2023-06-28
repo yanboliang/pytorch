@@ -3,9 +3,9 @@ import operator
 
 import torch
 from torch._dynamo.utils import counters
+from .. import config
 
 from ..pattern_matcher import CallFunctionVarArgs
-from .. import config
 
 aten = torch.ops.aten
 
@@ -164,11 +164,7 @@ def group_batch_fusion_passes(graph: torch.fx.Graph):
     fusions = []
 
     if config.is_fbcode():
-        try:
-            import fbgemm_gpu
-            fusions += [GroupLinearFusion()]
-        except Exception:
-            pass
+        fusions += [GroupLinearFusion()]
 
     for fusion_rule in fusions:
         apply_group_batch_fusion(graph, fusion_rule)

@@ -1761,11 +1761,7 @@ if torch.version.hip is not None and torch.cuda.is_available():
 
 
 if config.is_fbcode():
-    try:
-        import fbgemm_gpu
-        make_fallback(torch.ops.fbgemm.group_gemm)
-    except Exception:
-        pass
+    make_fallback(torch.ops.fbgemm.group_gemm)
 
 
 @register_lowering(aten.clone)
