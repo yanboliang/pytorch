@@ -120,6 +120,102 @@ class GroupLinearFusion(GroupFusion):
             graph.erase_node(original_mm)
 
 
+class BatchLinearLHSFusion(BatchFusion):
+    def _addmm_node_can_be_fused(self, node):
+        input_shape = node.args[1].meta["tensor_meta"].shape
+        weight_shape = node.args[2].meta["tensor_meta"].shape
+        return (
+            node.kwargs.get("beta", 1.0) == 1.0
+            and node.kwargs.get("alpha", 1.0) == 1.0
+            and len(input_shape) == 2
+            and len(weight_shape) == 2
+        )
+
+    def _mm_node_can_be_fused(self, node):
+        input_shape = node.args[0].meta["tensor_meta"].shape
+        weight_shape = node.args[1].meta["tensor_meta"].shape
+        return len(input_shape) == 2 and len(weight_shape) == 2
+
+    def match(self, node):
+        if CallFunctionVarArgs(aten.mm.default).match(
+            node
+        ) and self._mm_node_can_be_fused(node):
+            input_shape = node.args[0].meta["tensor_meta"].shape
+            weight_shape = node.args[1].meta["tensor_meta"].shape
+            group_key = (
+                "batch_linear_lhs",
+                True,
+                node.args[0],
+                (input_shape[0], input_shape[1]),
+            )
+        elif CallFunctionVarArgs(aten.addmm.default).match(
+            node
+        ) and self._addmm_node_can_be_fused(node):
+            input_shape = node.args[1].meta["tensor_meta"].shape
+            weight_shape = node.args[2].meta["tensor_meta"].shape
+            bias = node.args[0]
+            group_key = (
+                "batch_linear_lhs",
+                bias is None,
+                node.args[1],
+                (input_shape[0], input_shape[1]),
+            )
+        else:
+            group_key = None
+        return group_key
+
+    def fuse(self, graph, subset):
+        batch_nodes = []
+        batch_input = None
+        batch_weights = []
+        batch_biases = []
+        split_sections = []
+        print("hello =====")
+
+        for node in subset:
+            if CallFunctionVarArgs(aten.addmm.default).match(node):
+                bias, input, weight = node.args
+            else:
+                assert CallFunctionVarArgs(aten.mm.default).match(node)
+                input, weight = node.args
+                bias = None
+            batch_nodes.append(node)
+            if batch_input is None:
+                batch_input = input
+            else:
+                assert batch_input is input
+            batch_weights.append(weight)
+            if bias:
+                batch_biases.append(bias)
+            split_sections.append(weight.meta["tensor_meta"].shape[1])
+
+        with graph.inserting_before(subset[0]):
+            cat_weights = graph.call_function(aten.cat, args=((batch_weights, 1)))
+            if len(batch_biases) > 0:
+                cat_biases = graph.call_function(aten.cat, args=((batch_biases, 0)))
+                fused_lhs = graph.call_function(
+                    aten.addmm,
+                    args=(cat_biases, batch_input, cat_weights),
+                )
+            else:
+                fused_lhs = graph.call_function(
+                    aten.mm,
+                    args=(batch_input, cat_weights),
+                )
+            fused_lhs_list = graph.call_function(
+                aten.split, args=((fused_lhs, split_sections, 1))
+            )
+
+        for i, node in enumerate(batch_nodes):
+            with graph.inserting_after(fused_lhs_list):
+                new_node = graph.call_function(
+                    operator.getitem, args=(fused_lhs_list, i)
+                )
+            node.replace_all_uses_with(new_node)
+            new_node.meta.update(node.meta)
+            graph.erase_node(node)
+
+
 class BatchLayernormFusion(BatchFusion):
     """
     Batch layer norm fusion in pre grad pass
@@ -315,6 +411,8 @@ def apply_group_batch_fusion(graph, rule):
     for node in reversed(graph.nodes):
         candidates = get_fusion_candidates(rule, node, fused_set)
 
+        print(candidates)
+
         for key, candidate_nodes in candidates.items():
             if len(candidate_nodes) < MIN_FUSE_SET_SIZE:
                 continue
@@ -327,13 +425,16 @@ def apply_group_batch_fusion(graph, rule):
                 else:
                     counters["inductor"]["batch_fusion"] += 1
 
-                log.info(
+                print(
                     f"{rule.__class__.__name__}: key = {key}; subset size = {len(subset)}"  # noqa: G004
                 )
 
 
 def group_batch_fusion_post_grad_passes(graph: torch.fx.Graph):
     fusions = []
+
+    if config.batch_fusion:
+        fusions += [BatchLinearLHSFusion()]
 
     if config.group_fusion and has_fbgemm:
         fusions += [GroupLinearFusion()]

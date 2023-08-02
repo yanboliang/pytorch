@@ -126,6 +126,35 @@ class MyModule3(torch.nn.Module):
         return torch.cat(post_l2, dim=2)
 
 
+class MyModule4(torch.nn.Module):
+    def __init__(self, z: int, has_bias: bool, device="cuda") -> None:
+        super().__init__()
+        self.z = z
+        self.device = device
+        self.seq_len = 10
+        self.seq1 = [
+            torch.nn.Linear(z, z + i % 5, has_bias).to(self.device)
+            for i in range(self.seq_len)
+        ]
+        self.seq2 = [
+            torch.nn.Linear(z, z + i % 5, has_bias).to(self.device)
+            for i in range(self.seq_len)
+        ]
+        self.seq3 = [
+            torch.nn.Linear(z, z + i % 5, has_bias).to(self.device)
+            for i in range(self.seq_len)
+        ]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1 = [self.seq1[i](x) for i in range(self.seq_len)]
+        x2 = torch.add(x1[0], x1[5])
+        x3 = [self.seq2[i](x2) for i in range(self.seq_len)]
+        x4 = torch.add(x3[0], x3[5])
+        x5 = [self.seq3[i](x4) for i in range(self.seq_len)]
+        x6 = torch.cat(x5, dim=1)
+        return x6
+
+
 @requires_cuda()
 @torch._inductor.config.patch(group_fusion=True, batch_fusion=True)
 class TestGroupBatchFusion(TestCase):
@@ -246,6 +275,23 @@ class TestGroupBatchFusion(TestCase):
                 self.compare_parameters(module, traced)
                 self.compare_gradients(module, traced)
                 counters.clear()
+
+    def test_batch_linear_lhs_fusion(self):
+        z = 10
+        counters.clear()
+        module = MyModule4(z, True).eval().to("cuda")
+        input = [torch.randn(20, z, device="cuda")]
+        traced = torch.compile(module)
+        ref = module(*input)
+        res = traced(*input)
+        self.compare_pred(module, traced, input)
+        self.assertEqual(counters["inductor"]["batch_fusion"], 1)
+        ref.sum().backward()
+        res.sum().backward()
+        self.compare_parameters(module, traced)
+        self.compare_gradients(module, traced)
+        self.assertEqual(counters["inductor"]["batch_fusion"], 1)
+        counters.clear()
 
 
 if __name__ == "__main__":
