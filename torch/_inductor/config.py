@@ -435,6 +435,8 @@ else:
 # for larger kernels limit this
 kernel_name_max_ops = 10
 
+block_mn_size = tuple()
+
 # Pad input tensors of matmul/bmm/addmm to leverage Tensor Cores in NVIDIA GPUs
 shape_padding = os.environ.get("TORCHINDUCTOR_SHAPE_PADDING", "1") == "1"
 

@@ -179,9 +179,10 @@ def _get_default_config(query):
 
     if is_big_shared_mem:
         if query.get_dtype() == torch.float32:
-            default_config = (64, 64, 4, 3)
+            default_config = config.block_mn_size
         else:
-            default_config = (128, 64, 4, 3)
+            # print("----->>>   ", config.block_mn_size)
+            default_config = config.block_mn_size
     else:
         if query.get_dtype() == torch.float32:
             default_config = (32, 32, 4, 3)

@@ -14,6 +14,7 @@ from tqdm import tqdm
 torch._dynamo.config.automatic_dynamic_shapes = False
 # Needed since changing args to function causes recompiles
 torch._dynamo.config.cache_size_limit = 1000
+from torch._inductor import utils
 
 
 from triton.testing import do_bench
@@ -185,7 +186,7 @@ def print_results(results: List[Experiment]):
     table_data["speedup"] = speedups
 
     table_data["score_mod"] = [get_func_name(func) for func in table_data["score_mod"]]
-    print(tabulate(table_data, headers="keys", tablefmt="github", floatfmt=".3f"))
+    # print(tabulate(table_data, headers="keys", tablefmt="github", floatfmt=".3f"))
 
     average_data = get_average_speedups(results)
     print(tabulate(average_data, headers="keys", tablefmt="github", floatfmt=".3f"))
@@ -211,9 +212,9 @@ def generate_experiment_configs() -> List[ExperimentConfig]:
     batch_sizes = [1, 8, 16]
     num_heads = [16]
     q_kv_seq_lens = [(512, 512), (1024, 1024), (4096, 4096)]
-    head_dims = [64]
+    head_dims = [128]
     dtypes = [
-        torch.bfloat16,
+        torch.float32,
     ]
     score_mods = generate_score_mods()
     all_configs = []
@@ -242,7 +243,7 @@ def generate_experiment_configs() -> List[ExperimentConfig]:
     return all_configs
 
 
-def main():
+def _main():
     seed = 123
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -251,6 +252,22 @@ def main():
         results.append(Experiment(config, run_single_experiment(config)))
 
     print_results(results)
+
+
+def main():
+    m = [16, 32, 64, 128]
+    n = [16, 32, 64, 128]
+    # m = [16, 32]
+    # n = [16, 32]
+    for i, j in itertools.product(m, n):
+        print(i, j)
+        torch._dynamo.reset()
+        torch._inductor.config.block_mn_size = (i, j, 4, 3)
+        try:
+            _main()
+        except Exception as e:
+            print(e)
+            print("skip due to OOM ...")
 
 
 if __name__ == "__main__":
