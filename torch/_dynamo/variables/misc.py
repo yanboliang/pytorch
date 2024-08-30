@@ -635,6 +635,22 @@ class AutogradFunctionVariable(VariableTracker):
         super().__init__(**kwargs)
         self.fn_cls = fn_cls
 
+    def as_proxy(self):
+        return self.fn_cls
+
+    def var_getattr(self, tx: "InstructionTranslator", name: str) -> "VariableTracker":
+        from .builder import SourcelessBuilder, VariableBuilder
+
+        try:
+            attr_value = getattr(self.fn_cls, name)
+            if self.source:
+                attr_source = AttrSource(self.source, name)
+                return VariableBuilder(tx, attr_source)(attr_value)
+            else:
+                return SourcelessBuilder.create(tx, attr_value)
+        except AttributeError:
+            unimplemented(f"getattr({self.fn_cls}, {name})")
+
     def call_apply(self, tx: "InstructionTranslator", args, kwargs):
         requires_grad = False
 
@@ -760,7 +776,10 @@ class AutogradFunctionVariable(VariableTracker):
         from ..trace_rules import is_callable_allowed
         from .builder import wrap_fx_proxy
 
-        if name == "apply":
+        if name == "apply" and inspect.getattr_static(
+            self.fn_cls, "apply"
+        ) is not inspect.getattr_static(torch.autograd.function.Function, "apply"):
+            breakpoint()
             if is_callable_allowed(self.fn_cls):
                 trampoline_autograd_apply = produce_trampoline_autograd_apply(
                     self.fn_cls

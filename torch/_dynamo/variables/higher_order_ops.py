@@ -606,6 +606,12 @@ class TorchHigherOrderOperatorVariable(VariableTracker):
             return CallTorchbindHigherOrderVariable(value, source, **kwargs)
         elif value.__name__ == "wrap_with_set_grad_enabled":
             return WrapWithSetGradEnabledHigherOrderVariable(value, source, **kwargs)
+        elif value.__name__ == "custom_function_call":
+            # return torch._dynamo.variables.UserDefinedClassVariable(value)
+            return torch._dynamo.variables.UserMethodVariable(
+                value.__call__.__func__,
+                torch._dynamo.variables.UserDefinedClassVariable(value),
+            )
         else:
             unimplemented(f"HigherOrderOperator {value.__name__}")
 
