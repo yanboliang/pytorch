@@ -186,7 +186,12 @@ from .tensor import (
     TensorVariable,
     UnspecializedPythonVariable,
 )
-from .torch import TorchCtxManagerClassVariable, TorchInGraphFunctionVariable
+from .torch import (
+    FuncTorchInterpreterVariable,
+    TorchCtxManagerClassVariable,
+    TorchDispatchKeySetVariable,
+    TorchInGraphFunctionVariable,
+)
 from .torch_function import (
     build_torch_function_fn,
     TensorWithTFOverrideVariable,
@@ -633,7 +638,9 @@ class VariableBuilder:
             # equality, this allows us to handle non-literal values
             self.install_guards(GuardBuilder.ID_MATCH)
             return ConstantVariable.create(value=value, source=self.source)
-        elif isinstance(value, enum.Enum):
+        elif isinstance(
+            value, (enum.Enum, torch.DispatchKey, torch._C._functorch.TransformType)
+        ):
             self.install_guards(GuardBuilder.ID_MATCH)
             return EnumVariable(value=value, source=self.source)
         elif DebuggingVariable.is_reorderable_logging_function(value):
@@ -819,6 +826,12 @@ class VariableBuilder:
         elif isinstance(value, (torch._C._SDPAParams)):
             self.install_guards(GuardBuilder.TYPE_MATCH)
             return SDPAParamsVariable.create(self.tx, value, self.source)
+        elif isinstance(value, torch.DispatchKeySet):
+            self.install_guards(GuardBuilder.ID_MATCH)
+            return TorchDispatchKeySetVariable(value)
+        elif isinstance(value, torch._functorch.pyfunctorch.FuncTorchInterpreter):
+            self.install_guards(GuardBuilder.ID_MATCH)
+            return FuncTorchInterpreterVariable(value)
         elif isinstance(value, _EventBase):
             self.install_guards(GuardBuilder.ID_MATCH)
             torch._dynamo.utils.store_user_object_weakref(value)
@@ -2217,6 +2230,13 @@ def wrap_fx_proxy_cls(
     ):
         set_example_value(proxy.node, example_value)
         return EventVariable(proxy, example_value, **options)
+    elif proxy.node.target in [
+        torch._C._dispatch_keys,
+        torch._C._dispatch_tls_local_include_set,
+        torch._C._dispatch_tls_local_exclude_set,
+    ]:
+        set_example_value(proxy.node, example_value)
+        return TorchDispatchKeySetVariable(example_value, **options)
     elif isinstance(example_value, int) and (
         proxy.node.target
         in [
@@ -2733,10 +2753,16 @@ class SourcelessBuilder:
             return trace_rules.lookup_callable(value)(value)
         elif is_function_or_wrapper(value):
             return trace_rules.lookup(value)(value)
-        elif isinstance(value, enum.Enum):
+        elif isinstance(
+            value, (enum.Enum, torch.DispatchKey, torch._C._functorch.TransformType)
+        ):
             return EnumVariable(value)
+        elif isinstance(value, torch._functorch.pyfunctorch.FuncTorchInterpreter):
+            return FuncTorchInterpreterVariable(value)
         elif isinstance(value, (type, abc.ABCMeta)):
             return UserDefinedClassVariable(value)
+        elif isinstance(value, torch.DispatchKeySet):
+            return TorchDispatchKeySetVariable(value)
         elif isinstance(value, types.MethodWrapperType):
             return MethodWrapperVariable(value)
         elif isinstance(value, torch.fx.graph_module.GraphModule):

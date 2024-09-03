@@ -638,6 +638,9 @@ class AutogradFunctionVariable(VariableTracker):
     def as_proxy(self):
         return self.fn_cls
 
+    def python_type(self):
+        return type(self.fn_cls)
+
     def var_getattr(self, tx: "InstructionTranslator", name: str) -> "VariableTracker":
         from .builder import SourcelessBuilder, VariableBuilder
 

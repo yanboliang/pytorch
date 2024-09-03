@@ -74,6 +74,8 @@ class ConstantVariable(VariableTracker):
         assert not isinstance(
             value, (list, tuple)
         ), "ConstantVariable(list) is banned - please create a ListVariable(items)"
+        if isinstance(value, torch._functorch.pyfunctorch.FuncTorchInterpreter):
+            breakpoint()
         if np is not None and isinstance(value, np.number):
             self.value = value.item()
         else:

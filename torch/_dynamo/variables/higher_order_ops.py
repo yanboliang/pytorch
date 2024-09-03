@@ -610,7 +610,7 @@ class TorchHigherOrderOperatorVariable(VariableTracker):
             # return torch._dynamo.variables.UserDefinedClassVariable(value)
             return torch._dynamo.variables.UserMethodVariable(
                 value.__call__.__func__,
-                torch._dynamo.variables.UserDefinedClassVariable(value),
+                torch._dynamo.variables.UserDefinedObjectVariable(value),
             )
         else:
             unimplemented(f"HigherOrderOperator {value.__name__}")

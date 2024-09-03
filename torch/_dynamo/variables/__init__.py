@@ -98,7 +98,12 @@ from .tensor import (
     UnspecializedPythonVariable,
     UntypedStorageVariable,
 )
-from .torch import TorchCtxManagerClassVariable, TorchInGraphFunctionVariable
+from .torch import (
+    FuncTorchInterpreterVariable,
+    TorchCtxManagerClassVariable,
+    TorchDispatchKeySetVariable,
+    TorchInGraphFunctionVariable,
+)
 from .user_defined import (
     MutableMappingVariable,
     RemovableHandleVariable,
@@ -128,6 +133,7 @@ __all__ = [
     "DeterministicAlgorithmsVariable",
     "EnumVariable",
     "FakeItemVariable",
+    "FuncTorchInterpreterVariable",
     "GetAttrVariable",
     "GradModeVariable",
     "InspectSignatureVariable",
@@ -160,6 +166,7 @@ __all__ = [
     "SuperVariable",
     "TensorVariable",
     "TorchCtxManagerClassVariable",
+    "TorchDispatchKeySetVariable",
     "TorchInGraphFunctionVariable",
     "TorchVersionVariable",
     "TupleVariable",

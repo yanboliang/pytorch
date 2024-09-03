@@ -850,6 +850,7 @@ class BuiltinVariable(VariableTracker):
                     rv = fn(tx, args, kwargs)
                     if rv:
                         return rv
+                breakpoint()
                 unimplemented(error_msg)
 
         return builtin_dispatch
@@ -2083,6 +2084,10 @@ class BuiltinVariable(VariableTracker):
                 ),
                 sym_num=None,
             )
+        if isinstance(a, variables.TorchDispatchKeySetVariable) and isinstance(
+            b, variables.TorchDispatchKeySetVariable
+        ):
+            return variables.TorchDispatchKeySetVariable(a.value | b.value)
         if hasattr(a, "set_items") and hasattr(b, "set_items"):
             return SetVariable(list(a.set_items | b.set_items))
         # None no-ops this handler and lets the driving function proceed
