@@ -756,6 +756,12 @@ class TorchHigherOrderOperatorVariable(VariableTracker):
             return InvokeSubgraphHigherOrderVariable(value, source, **kwargs)
         elif isinstance(value, PrimHOPBase):
             return PrimHOPBaseVariable(value, source, **kwargs)
+        elif value.__name__ == "custom_function_call":
+            # Try to inline torch._functorch.autograd_function.CustomFunctionHigherOrderOperator.__call__
+            return torch._dynamo.variables.UserMethodVariable(
+                value.__call__.__func__,
+                torch._dynamo.variables.UserDefinedObjectVariable(value),
+            )
         else:
             unimplemented(f"HigherOrderOperator {value.__name__}")
 
@@ -2425,13 +2431,15 @@ class AutogradFunctionApplyVariable(VariableTracker):
         )
 
         ctx = AutogradFunctionContextVariable.create(tx, args, kwargs)
+        fwd_src = AttrSource(self.parent_source, member="forward")
         if isinstance(self.fwd_graph, types.FunctionType):
-            fwd_fn = UserFunctionVariable(self.fwd_graph)
+            fwd_fn = UserFunctionVariable(self.fwd_graph, source=fwd_src)
             fwd_args = [ctx, *args]
         elif isinstance(self.fwd_graph, types.MethodType):
             fwd_fn = UserMethodVariable(
                 self.fwd_graph.__func__,
                 UserDefinedClassVariable(self.fwd_graph.__class__),
+                source=fwd_src,
             )
             fwd_args = [fwd_fn.obj, ctx, *args]
         else:

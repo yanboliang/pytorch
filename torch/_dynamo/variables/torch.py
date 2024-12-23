@@ -792,6 +792,23 @@ class TorchInGraphFunctionVariable(BaseTorchVariable):
                 _unsafe_set_version_counter
             ).call_function(tx, [*args], kwargs)
 
+        @register(torch._C._functorch.peek_interpreter_stack)
+        def handle_functorch_peek_interpreter_stack(
+            self, tx: "InstructionTranslator", *args, **kwargs
+        ):
+            return UserDefinedObjectVariable(
+                torch._C._functorch.peek_interpreter_stack()
+            )
+
+        @register(torch._functorch.pyfunctorch.coerce_cinterpreter)
+        def handle_functorch_pyfunctorch_coerce_cinterpreter(
+            self, tx: "InstructionTranslator", *args, **kwargs
+        ):
+            cinterpreter = args[0].value
+            return FuncTorchInterpreterVariable(
+                torch._functorch.pyfunctorch.coerce_cinterpreter(cinterpreter)
+            )
+
         @register(torch.tensor)
         def handle_torch_tensor(self, tx: "InstructionTranslator", *args, **kwargs):
             def check_any_unspec(x):
@@ -1189,3 +1206,81 @@ Either create the tensor outside the compiled region, or do not set the tensor t
                 (torch._ops.OpOverload, torch._ops.OpOverloadPacket),
             )
         ) and can_dispatch_torch_function(tx, args, kwargs)
+
+
+class TorchDispatchKeySetVariable(VariableTracker):
+    """represents torch.DispatchKeySet"""
+
+    def __init__(self, value, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.value = value
+
+    def as_proxy(self):
+        return self.value
+
+    def python_type(self):
+        return type(self.value)
+
+    def as_python_constant(self):
+        return self.value
+
+    def is_python_constant(self):
+        return True
+
+    def call_method(
+        self,
+        tx,
+        name,
+        args: "List[VariableTracker]",
+        kwargs: "Dict[str, VariableTracker]",
+    ) -> "VariableTracker":
+        if name == "highestPriorityTypeId":
+            return variables.EnumVariable(self.value.highestPriorityTypeId())
+        return super().call_method(tx, name, args, kwargs)
+
+
+class FuncTorchInterpreterVariable(VariableTracker):
+    """represents torch._functorch.pyfunctorch.FuncTorchInterpreter"""
+
+    def __init__(self, value, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.value = value
+
+    def as_proxy(self):
+        return self.value
+
+    def python_type(self):
+        return type(self.value)
+
+    def as_python_constant(self):
+        return self.value
+
+    def is_python_constant(self):
+        return True
+
+    def call_method(
+        self,
+        tx,
+        name,
+        args: "List[VariableTracker]",
+        kwargs: "Dict[str, VariableTracker]",
+    ) -> "VariableTracker":
+        if name == "process":
+            method = getattr(self.value, name)
+            return tx.inline_user_function_return(
+                variables.UserFunctionVariable(method.__func__),
+                [self] + args,
+                kwargs,
+            )
+        elif name == "level":
+            return variables.ConstantVariable.create(self.value.level())
+        elif name == "batch_size":
+            return variables.ConstantVariable.create(self.value.batch_size())
+        elif name == "randomness":
+            return variables.ConstantVariable.create(self.value.randomness())
+        elif name == "lower":
+            assert not args and not kwargs
+            return variables.ctx_manager.TemporarilyPopInterpreterStackCtxManagerVariable.create(
+                tx, None
+            )
+        return super().call_method(tx, name, args, kwargs)

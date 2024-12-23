@@ -348,6 +348,9 @@ class TracerBase:
         elif isinstance(a, (*base_types, enum.Enum)) or a is None or a is ...:
             return a
 
+        elif isinstance(a, torch.autograd.function.FunctionMeta):
+            return a
+
         raise NotImplementedError(f"argument of type: {type(a)}")
 
     @compatibility(is_backward_compatible=True)
