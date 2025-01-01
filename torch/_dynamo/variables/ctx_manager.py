@@ -259,14 +259,14 @@ class TemporarilyPopInterpreterStackCtxManagerVariable(ContextWrappingVariable):
             (),
             {},
         )
-        return variables.ConstantVariable.create(None)
+        return variables.ConstantVariable.create(self.saved)
 
     def exit(self, tx: "InstructionTranslator", *args):
         self.state.cleanup()
         tx.output.create_node(
             "call_function",
             torch._C._functorch.push_dynamic_layer_stack,
-            (self.saved,),
+            (self.state.proxy,),
             {},
         )
         return variables.ConstantVariable.create(None)

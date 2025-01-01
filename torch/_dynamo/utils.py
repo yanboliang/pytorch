@@ -1830,6 +1830,7 @@ common_constant_types: Set[type] = {
     torch.iinfo,
     torch.nn.attention.SDPBackend,
     torch.cuda._CudaDeviceProperties,
+    torch._C._functorch.DynamicLayer,
 }
 
 if has_triton_package():

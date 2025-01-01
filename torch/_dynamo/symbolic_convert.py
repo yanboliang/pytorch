@@ -1153,6 +1153,8 @@ class InstructionTranslatorBase(
         assert inst.argval in self.cell_and_freevars()
         cell = self.symbolic_locals[inst.argval]
         val = self.pop()
+        # if inst.argval == "out_dims":
+        #     breakpoint()
         self.output.side_effects.store_cell(cell, val)
 
         assert isinstance(cell, CellVariable)  # tame mypy

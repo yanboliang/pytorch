@@ -1153,6 +1153,11 @@ class VariableBuilder:
                 return PreserveVersionContextVariable.constructor(self.tx)
             # This is a userdefined class, so install an ID_MATCH even if its a
             # global variable.
+            if isinstance(
+                value,
+                torch._functorch.autograd_function.CustomFunctionHigherOrderOperator,
+            ):
+                breakpoint()
             self.install_guards(GuardBuilder.ID_MATCH)
             return UserDefinedClassVariable(
                 value,
@@ -3056,6 +3061,7 @@ class SourcelessBuilder:
             return RegexPatternVariable(value)
         elif isinstance(value, torch._dynamo.variables.lazy.LazySymNodeFormatString):
             return ConstantVariable.create(str(value))
+        breakpoint()
         unimplemented(
             f"Unexpected type in sourceless builder {value_type.__module__}.{value_type.__qualname__}"
         )

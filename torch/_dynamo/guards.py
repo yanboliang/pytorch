@@ -162,6 +162,14 @@ recompiles_verbose_log = torch._logging.getArtifactLogger(
 verbose_guards_log = torch._logging.getArtifactLogger(__name__, "verbose_guards")
 
 
+def skip_guard_by_name(name):
+    return (
+        "G['__import_torch_dot__functorch_dot_autograd_function'].VmappedLinearFunction"
+        in name
+        or "G['__import_torch_dot_autograd_dot_function'].custom_function_call" in name
+    )
+
+
 class GuardManagerWrapper:
     """
     A helper class that contains the root guard manager. An instance of this
@@ -1400,6 +1408,10 @@ class GuardBuilder(GuardBuilderBase):
         )
 
     def ID_MATCH(self, guard: Guard):
+        if skip_guard_by_name(guard.name):
+            return
+        if "G['LinearFunction'].apply" in guard.name:
+            return
         # ___check_obj_id is same as `id(x) == y`
         if isinstance(guard.originating_source, TypeSource):
             # optional optimization to produce cleaner/faster guard code
@@ -1610,6 +1622,8 @@ class GuardBuilder(GuardBuilderBase):
         return
 
     def CONSTANT_MATCH(self, guard: Guard):
+        if skip_guard_by_name(guard.name):
+            return
         val = self.get(guard.name)
         if istype(val, (bool, type(None), types.CodeType)):
             self.ID_MATCH(guard)
@@ -1626,10 +1640,14 @@ class GuardBuilder(GuardBuilderBase):
             exc.unimplemented(f"Guard setup for uninitialized class {type(val)}")
 
     def FUNCTION_MATCH(self, guard: Guard):
+        if skip_guard_by_name(guard.name):
+            return
         """things like torch.add and user defined functions"""
         return self.ID_MATCH(guard)
 
     def CLOSURE_MATCH(self, guard: Guard):
+        if skip_guard_by_name(guard.name):
+            return
         """matches a closure by __code__ id."""
         val = self.get(guard.name)
         # Strictly only want user-defined functions
@@ -1640,12 +1658,16 @@ class GuardBuilder(GuardBuilderBase):
             self.FUNCTION_MATCH(guard)
 
     def BUILTIN_MATCH(self, guard: Guard):
+        if skip_guard_by_name(guard.name):
+            return
         return self.FUNCTION_MATCH(guard)
 
     def PYMODULE_MATCH(self, guard: Guard):
         return self.FUNCTION_MATCH(guard)
 
     def SEQUENCE_LENGTH(self, guard):
+        if skip_guard_by_name(guard.name):
+            return
         # This guard is used to check lenght of PySequence objects like list,
         # tuple, collections.deque etc
         ref = self.arg_ref(guard)

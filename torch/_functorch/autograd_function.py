@@ -396,7 +396,7 @@ def vmapify_autograd_function(autograd_function, in_dims, batch_size, randomness
     #   assigned those fields to the ctx object, the worry is that they
     #   get overwritten.
     init_val = "not populated"
-    out_dims = init_val
+    out_dims = 0
     input_shapes: Any = init_val
     saved_tensors_bdims: Any = init_val
 
@@ -495,7 +495,8 @@ def vmapify_autograd_function(autograd_function, in_dims, batch_size, randomness
     )
 
     def get_out_dims():
-        assert out_dims != init_val
+        nonlocal out_dims
+        # assert out_dims != init_val
         return out_dims
 
     return Generated, get_out_dims

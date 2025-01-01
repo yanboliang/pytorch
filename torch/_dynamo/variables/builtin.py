@@ -989,6 +989,20 @@ class BuiltinVariable(VariableTracker):
         args: "List[VariableTracker]",
         kwargs: "Dict[str, VariableTracker]",
     ) -> "VariableTracker":
+        if (
+            self.fn is getattr
+            and len(args) == 2
+            and isinstance(args[0], variables.misc.CtxCustomSaveVariable)
+        ):
+            # breakpoint()
+            return args[0].var_getattr(tx, args[1].as_python_constant())
+        elif (
+            self.fn is setattr
+            and len(args) == 3
+            and isinstance(args[0], variables.misc.CtxCustomSaveVariable)
+        ):
+            return args[0].call_method(tx, "setattr", args[1:], kwargs)
+
         if kwargs:
             kwargs = {k: v.realize() for k, v in kwargs.items()}
             key = (self.fn, *(type(x) for x in args), True)

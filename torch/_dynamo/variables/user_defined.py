@@ -344,6 +344,17 @@ class UserDefinedClassVariable(UserDefinedVariable):
                     **{k: v.as_python_constant() for k, v in kwargs.items()},
                 ),
             )
+        elif self.value is torch._functorch.autograd_function.CtxCustomSave:
+            assert len(args) == 2
+            ctx = args[0].value
+            current_level = args[1].as_python_constant()
+            return variables.misc.CtxCustomSaveVariable(
+                torch._functorch.autograd_function.CtxCustomSave(ctx, current_level),
+                args[0],
+            )
+        elif self.value is torch._functorch.autograd_function.CtxWithSavedTensors:
+            assert len(args) == 2
+            return variables.misc.CtxWithSavedTensorsVariable(args[0], args[1])
         elif self.value is torch.nn.CrossEntropyLoss:
             return self._call_cross_entropy_loss(tx, args, kwargs)
         elif self.value is contextlib.nullcontext:

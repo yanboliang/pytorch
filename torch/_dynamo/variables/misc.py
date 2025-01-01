@@ -638,7 +638,6 @@ class AutogradFunctionVariable(VariableTracker):
             and self.fn_cls.__name__.startswith("Vmapped")
             and not torch._C._are_functorch_transforms_active()
         ):
-            # breakpoint()
             forward_fn = autograd_function_forward_rewritten(
                 self.fn_cls.forward, self.fn_cls.setup_context
             )
@@ -842,6 +841,61 @@ class SavedTensorBox:
     tensors: List[VariableTracker] = dataclasses.field(default_factory=list)
 
 
+class CtxCustomSaveVariable(VariableTracker):
+    def __init__(self, value, ctx_var, **kwargs):
+        super().__init__(**kwargs)
+        self.value = value
+        self.ctx_var = ctx_var
+
+    def var_getattr(self, tx: "InstructionTranslator", name):
+        from .builder import SourcelessBuilder
+
+        if name == "save_for_backward":
+            return GetAttrVariable(self, name)
+        elif name == "_pt_current_level":
+            return variables.ConstantVariable(self.value._pt_current_level)
+        elif name == "_pt_saved_tensors_bdims":
+            return SourcelessBuilder.create(tx, self.value._pt_saved_tensors_bdims)
+        elif name == "_pt_inner_ctx":
+            return self.ctx_var
+        else:
+            unimplemented(f"ctx_custom_save method: {name}")
+
+    def call_method(
+        self,
+        tx,
+        name,
+        args: "List[VariableTracker]",
+        kwargs: "Dict[str, VariableTracker]",
+    ) -> "VariableTracker":
+        if name == "save_for_backward":
+            method = self.value.save_for_backward
+            return variables.UserMethodVariable(method.__func__, self).call_function(
+                tx, args, kwargs
+            )
+        elif name == "setattr":
+            self.value._pt_saved_tensors_bdims = args[1].as_python_constant()
+            return variables.ConstantVariable.create(None)
+        else:
+            unimplemented(f"ctx_custom_save method: {name}")
+
+
+class CtxWithSavedTensorsVariable(VariableTracker):
+    def __init__(self, ctx_var, new_saved_tensors_var, **kwargs):
+        super().__init__(**kwargs)
+        self.ctx_var = ctx_var
+        self.new_saved_tensors_var = new_saved_tensors_var
+
+    def var_getattr(self, tx: "InstructionTranslator", name):
+        if name == "saved_tensors":
+            return self.new_saved_tensors_var
+        elif name == "needs_input_grad":
+            if self.ctx_var.needs_input_grad is not None:
+                return variables.ConstantVariable.create(self.ctx_var.needs_input_grad)
+        else:
+            unimplemented(f"ctx_with_saved_tensors method: {name}")
+
+
 class AutogradFunctionContextVariable(UserDefinedObjectVariable):
     """
     Tracks an autograd.Function() context using mutation tracking in side_effects.py
@@ -1031,6 +1085,18 @@ class GetAttrVariable(VariableTracker):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.obj}, {self.name})"
+
+    def call_hasattr(self, tx: "InstructionTranslator", name):
+        if (
+            isinstance(self.obj, AutogradFunctionVariable)
+            and self.name == "apply"
+            and name == "__name__"
+        ):
+            return variables.ConstantVariable.create(
+                hasattr(self.obj.fn_cls.apply, "__name__")
+            )
+        else:
+            unimplemented(f"hasattr {self.obj} {self.name} {name}")
 
     @staticmethod
     def create_getattr_proxy(base_proxy: torch.fx.Proxy, attr):

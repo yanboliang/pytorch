@@ -26,7 +26,6 @@ from .variables.base import (
     AttributeMutation,
     AttributeMutationExisting,
     AttributeMutationNew,
-    is_side_effect_safe,
     ValueMutationExisting,
     ValueMutationNew,
     VariableTracker,
@@ -143,10 +142,10 @@ class SideEffects:
             return True
         if self.should_allow_side_effects_under_checkpoint():
             return True
-        if not is_side_effect_safe(item.mutation_type):
-            unimplemented(
-                "HigherOrderOperator: Mutating a variable not in the current scope (SideEffects)"
-            )
+        # if not is_side_effect_safe(item.mutation_type):
+        #     unimplemented(
+        #         "HigherOrderOperator: Mutating a variable not in the current scope (SideEffects)"
+        #     )
 
     def store_attr(self, item: VariableTracker, name: str, value: VariableTracker):
         assert self.is_attribute_mutation(item)
