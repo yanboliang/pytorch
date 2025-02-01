@@ -107,6 +107,7 @@ constant_fold_functions_need_guards = [
 constant_fold_functions = [
     torch._assert,
     torch._utils._get_device_index,
+    torch._C._functorch.current_level,
     torch._C._get_cublas_allow_tf32,
     torch._C._is_any_autocast_enabled,
     torch.cuda.get_device_properties,
@@ -1317,4 +1318,9 @@ class FuncTorchInterpreterVariable(BaseTorchVariable):
             )
         elif name in ["level", "batch_size", "randomness"]:
             return variables.ConstantVariable.create(getattr(self.value, name)())
+        elif name == "lower":
+            assert not args and not kwargs
+            return variables.ctx_manager.TemporarilyPopInterpreterStackCtxManagerVariable.create(
+                tx, None
+            )
         return super().call_method(tx, name, args, kwargs)
